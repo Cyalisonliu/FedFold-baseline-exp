@@ -1,0 +1,59 @@
+#python test.py --dataset CIFAR100 --model ResNet --device_ratio S1-W9 --n_split 20 --train_ratio 16-1
+#python test.py --dataset CIFAR100 --model ResNet --device_ratio S2-W8 --n_split 20 --train_ratio 16-1
+#python test.py --dataset CIFAR100 --model ResNet --device_ratio S3-W7 --n_split 20 --train_ratio 16-1
+#python test.py --dataset CIFAR100 --model ResNet --device_ratio S4-W6 --n_split 20 --train_ratio 16-1
+#python test.py --dataset CIFAR100 --model ResNet --device_ratio S5-W5 --n_split 20 --train_ratio 16-1
+#python test.py --dataset CIFAR100 --model ResNet --device_ratio S6-W4 --n_split 20 --train_ratio 16-1
+#python test.py --dataset CIFAR100 --model ResNet --device_ratio S7-W3 --n_split 20 --train_ratio 16-1
+#python test.py --dataset CIFAR100 --model ResNet --device_ratio S8-W2 --n_split 20 --train_ratio 16-1
+#python test.py --dataset CIFAR100 --model ResNet --device_ratio S9-W1 --n_split 20 --train_ratio 16-1
+
+#python test.py --dataset CIFAR100 --model ResNet --device_ratio S1-W9 --n_split 60 --train_ratio 16-1
+#python test.py --dataset CIFAR100 --model ResNet --device_ratio S2-W8 --n_split 60 --train_ratio 16-1
+#python test.py --dataset CIFAR100 --model ResNet --device_ratio S3-W7 --n_split 60 --train_ratio 16-1
+#python test.py --dataset CIFAR100 --model ResNet --device_ratio S4-W6 --n_split 60 --train_ratio 16-1
+#python test.py --dataset CIFAR100 --model ResNet --device_ratio S5-W5 --n_split 60 --train_ratio 16-1
+#python test.py --dataset CIFAR100 --model ResNet --device_ratio S6-W4 --n_split 60 --train_ratio 16-1
+#python test.py --dataset CIFAR100 --model ResNet --device_ratio S7-W3 --n_split 60 --train_ratio 16-1
+#python test.py --dataset CIFAR100 --model ResNet --device_ratio S8-W2 --n_split 60 --train_ratio 16-1
+#python test.py --dataset CIFAR100 --model ResNet --device_ratio S9-W1 --n_split 60 --train_ratio 16-1
+
+#python test.py --dataset CIFAR10 --model ResNet --device_ratio S1-W9 --n_split 2 --train_ratio 16-1
+#python test.py --dataset CIFAR10 --model ResNet --device_ratio S2-W8 --n_split 2 --train_ratio 16-1
+#python test.py --dataset CIFAR10 --model ResNet --device_ratio S3-W7 --n_split 2 --train_ratio 16-1
+#python test.py --dataset CIFAR10 --model ResNet --device_ratio S4-W6 --n_split 2 --train_ratio 16-1
+#python test.py --dataset CIFAR10 --model ResNet --device_ratio S5-W5 --n_split 2 --train_ratio 16-1
+#python test.py --dataset CIFAR10 --model ResNet --device_ratio S6-W4 --n_split 2 --train_ratio 16-1
+#python test.py --dataset CIFAR10 --model ResNet --device_ratio S7-W3 --n_split 2 --train_ratio 16-1
+#python test.py --dataset CIFAR10 --model ResNet --device_ratio S8-W2 --n_split 2 --train_ratio 16-1
+#python test.py --dataset CIFAR10 --model ResNet --device_ratio S9-W1 --n_split 2 --train_ratio 16-1
+#
+#python test.py --dataset CIFAR10 --model ResNet --device_ratio S1-W9 --n_split 4 --train_ratio 16-1
+#python test.py --dataset CIFAR10 --model ResNet --device_ratio S2-W8 --n_split 4 --train_ratio 16-1
+#python test.py --dataset CIFAR10 --model ResNet --device_ratio S3-W7 --n_split 4 --train_ratio 16-1
+#python test.py --dataset CIFAR10 --model ResNet --device_ratio S4-W6 --n_split 4 --train_ratio 16-1
+#python test.py --dataset CIFAR10 --model ResNet --device_ratio S5-W5 --n_split 4 --train_ratio 16-1
+#python test.py --dataset CIFAR10 --model ResNet --device_ratio S6-W4 --n_split 4 --train_ratio 16-1
+#python test.py --dataset CIFAR10 --model ResNet --device_ratio S7-W3 --n_split 4 --train_ratio 16-1
+#python test.py --dataset CIFAR10 --model ResNet --device_ratio S8-W2 --n_split 4 --train_ratio 16-1
+#python test.py --dataset CIFAR10 --model ResNet --device_ratio S9-W1 --n_split 4 --train_ratio 16-1
+#
+python test.py --dataset CIFAR10 --model ResNet --device_ratio S1-W9 --n_split 6 --train_ratio 16-1
+python test.py --dataset CIFAR10 --model ResNet --device_ratio S2-W8 --n_split 6 --train_ratio 16-1
+python test.py --dataset CIFAR10 --model ResNet --device_ratio S3-W7 --n_split 6 --train_ratio 16-1
+python test.py --dataset CIFAR10 --model ResNet --device_ratio S4-W6 --n_split 6 --train_ratio 16-1
+python test.py --dataset CIFAR10 --model ResNet --device_ratio S5-W5 --n_split 6 --train_ratio 16-1
+python test.py --dataset CIFAR10 --model ResNet --device_ratio S6-W4 --n_split 6 --train_ratio 16-1
+python test.py --dataset CIFAR10 --model ResNet --device_ratio S7-W3 --n_split 6 --train_ratio 16-1
+python test.py --dataset CIFAR10 --model ResNet --device_ratio S8-W2 --n_split 6 --train_ratio 16-1
+python test.py --dataset CIFAR10 --model ResNet --device_ratio S9-W1 --n_split 6 --train_ratio 16-1
+
+#python test.py --dataset CIFAR10 --model CNN --device_ratio S1-W9 --n_split 6 --train_ratio 16-1
+#python test.py --dataset CIFAR10 --model CNN --device_ratio S2-W8 --n_split 6 --train_ratio 16-1
+#python test.py --dataset CIFAR10 --model CNN --device_ratio S3-W7 --n_split 6 --train_ratio 16-1
+#python test.py --dataset CIFAR10 --model CNN --device_ratio S4-W6 --n_split 6 --train_ratio 16-1
+#python test.py --dataset CIFAR10 --model CNN --device_ratio S5-W5 --n_split 6 --train_ratio 16-1
+#python test.py --dataset CIFAR10 --model CNN --device_ratio S6-W4 --n_split 6 --train_ratio 16-1
+#python test.py --dataset CIFAR10 --model CNN --device_ratio S7-W3 --n_split 6 --train_ratio 16-1
+#python test.py --dataset CIFAR10 --model CNN --device_ratio S8-W2 --n_split 6 --train_ratio 16-1
+#python test.py --dataset CIFAR10 --model CNN --device_ratio S9-W1 --n_split 6 --train_ratio 16-1

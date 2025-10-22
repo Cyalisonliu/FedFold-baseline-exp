@@ -1,0 +1,63 @@
+# Ignore result files (logs, tables, but allow requirements.txt and other essential text files)
+*.log
+*.csv
+*.tsv
+*.out
+*.txt
+# Allow requirements.txt, README.txt, etc.
+!requirements.txt
+!README.txt
+!*requirements*.txt
+
+# Numerical / model artifact files
+*.npy
+*.npz
+*.h5
+*.pth
+*.ckpt
+*.pt
+
+# Common output / result folders
+/results/
+/output/
+/outputs/
+/model/
+/models/
+/checkpoints/
+/artifacts/
+# ignore any wandb directory at any depth
+log/
+evaluation/
+wandb/
+dataset/
+data/
+
+# Dev & Python niceties
+__pycache__/
+*.py[cod]
+venv/
+env/
+.env
+.idea/
+.vscode/
+.DS_Store
+
+# Ensure essential code and config files are always tracked
+!*.py
+!*.sh
+!*.yml
+!*.yaml
+!*.json
+!*.toml
+!*.cfg
+!*.ini
+!requirements*.txt
+!README*
+!LICENSE*
+!Makefile
+!*.md
+
+# Conda environment directories
+miniconda/
+# Conda package cache
+pkgs/

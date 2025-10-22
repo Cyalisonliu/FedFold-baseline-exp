@@ -1,0 +1,9 @@
+python test.py --dataset CIFAR100 --model ResNet18 --strong 10 --weak 90 --n_split 20 --checkpoint 1st
+python test.py --dataset CIFAR100 --model ResNet18 --strong 10 --weak 90 --n_split 40 --checkpoint 1st
+python test.py --dataset CIFAR100 --model ResNet18 --strong 10 --weak 90 --n_split 60 --checkpoint 1st
+#python test.py --dataset CIFAR100 --model ResNet18 --strong 20 --weak 80 --n_split 20 --checkpoint 1st
+#python test.py --dataset CIFAR100 --model ResNet18 --strong 20 --weak 80 --n_split 40 --checkpoint 1st
+#python test.py --dataset CIFAR100 --model ResNet18 --strong 20 --weak 80 --n_split 60 --checkpoint 1st
+#python test.py --dataset CIFAR100 --model ResNet18 --strong 30 --weak 70 --n_split 20 --checkpoint 1st
+#python test.py --dataset CIFAR100 --model ResNet18 --strong 30 --weak 70 --n_split 40 --checkpoint 1st
+#python test.py --dataset CIFAR100 --model ResNet18 --strong 30 --weak 70 --n_split 60 --checkpoint 1st
