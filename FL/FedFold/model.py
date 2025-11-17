@@ -26,7 +26,7 @@ class Block(nn.Module):
         return out
     
 class ResNet(nn.Module):
-    def __init__(self, hidden_size, input_channel=3, n_class=10, block=Block, num_blocks=[2, 2, 2, 2]):
+    def __init__(self, hidden_size, input_channel=3, n_class: int=10, block=Block, num_blocks=[2, 2, 2, 2]):
         super(ResNet, self).__init__()
         self.in_planes = hidden_size[0]
         self.conv1 = nn.Conv2d(input_channel, hidden_size[0], kernel_size=3, stride=1, padding=1, bias=False)
@@ -60,7 +60,7 @@ class ResNet(nn.Module):
         return out
 
 class Conv(nn.Module):
-    def __init__(self, hidden_size, input_channel=3, n_class=10):
+    def __init__(self, hidden_size, input_channel=3, n_class: int=10):
         super().__init__()
         blocks = [nn.Conv2d(input_channel, hidden_size[0], 3, 1, 1),
                   nn.ReLU(inplace=True),
@@ -81,7 +81,7 @@ class Conv(nn.Module):
         return output
 
 class MLP(nn.Module):
-    def __init__(self, hidden_size, input_channel=93, n_class=9):
+    def __init__(self, hidden_size, input_channel=93, n_class: int=9):
         super().__init__()
         blocks = [nn.Linear(input_channel, hidden_size[0]),
                   nn.ReLU(inplace=True)]

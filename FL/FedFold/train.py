@@ -57,6 +57,9 @@ parser.add_argument('--only_strong', action='store_true', help='train only stron
 parser.add_argument('--only_weak', action='store_true', help='train only weak devices')
 parser.add_argument('--n_split', type=int, default=2, help='number of splits for non-iid data')
 parser.add_argument('--dataset', type=str, default='CIFAR10', help='dataset')
+parser.add_argument('--quantize', action='store_true', help='Apply quantization to uploaded model weights.')
+parser.add_argument('--quant_bits', type=int, default=-1, 
+                    help='Fixed number of bits for quantization (e.g., 4, 8, 16). If -1, a random rate from [1, 2, 4, 8, 16, 32] is selected.')
 args = parser.parse_args()
 
 cfg['log'] = args.log
@@ -69,6 +72,8 @@ cfg['n_split'] = args.n_split
 cfg['TBW'] = int(args.train_ratio.split('-')[0])
 cfg['medium_BW'] = int(args.train_ratio.split('-')[1]) # for three types of devices
 cfg['dataset'] = args.dataset
+cfg['quantize'] = args.quantize
+cfg['quant_bits'] = args.quant_bits
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 # device = 'cpu'
 print(torch.cuda.is_available())
@@ -77,7 +82,7 @@ print(torch.cuda.is_available())
 dataset, labels = get_dataset(cfg['dataset'], cfg['val_ratio'])
 
 # get model and hidden size for each width of model
-model_fn, hidden_size = set_parameters(cfg)
+model_fn, hidden_size, cfg['n_class']= set_parameters(cfg)
 
 # split train dataset for Non-IID
 fixSeed(cfg['seed'])
@@ -104,14 +109,14 @@ model_list = []
 model_log = []
 
 if cfg['device_ratio'] == 'W10':
-    model_list.append(model_fn(hidden_size['1']).to(device))
+    model_list.append(model_fn(hidden_size['1'], n_class=cfg['n_class']).to(device))
     model_log.append(1)
     total_bytes=0
     for param in model_list[0].parameters():
         total_bytes += param.data.nelement() * param.data.element_size()
     print(f"total bytes of model[{0}]: {total_bytes}")
 elif cfg['device_ratio'] == 'S10':
-    model_list.append(model_fn(hidden_size[str(TBW)]).to(device))
+    model_list.append(model_fn(hidden_size[str(TBW)], n_class=cfg['n_class']).to(device))
     model_log.append(TBW)
     total_bytes=0
     for param in model_list[0].parameters():
@@ -122,7 +127,7 @@ else:
         i=0
         while TBW != 1:
             target = math.ceil(TBW/2)
-            model_list.append(model_fn(hidden_size[str(target)]).to(device))
+            model_list.append(model_fn(hidden_size[str(target)], n_class=cfg['n_class']).to(device))
             model_log.append(target)
             TBW -= target
             total_bytes = 0
@@ -130,18 +135,18 @@ else:
                 total_bytes += param.data.nelement() * param.data.element_size()
             print(f"total bytes of model[{TBW}]: {total_bytes}")
             i+=1
-        model_list.append(model_fn(hidden_size['1']).to(device))
+        model_list.append(model_fn(hidden_size['1'], n_class=cfg['n_class']).to(device))
         model_log.append(1)
         print(f"model list has {len(model_list)} elements")
     else: # fixed splitting
         target = math.ceil(TBW/2)
         remain = TBW - target
         while target >= cfg['fix_split']:
-            model_list.append(model_fn(hidden_size[str(cfg['fix_split'])]).to(device))
+            model_list.append(model_fn(hidden_size[str(cfg['fix_split'])], n_class=cfg['n_class']).to(device))
             model_log.append(cfg['fix_split'])
             target -= cfg['fix_split']
         for _ in range(remain + target):         
-            model_list.append(model_fn(hidden_size['1']).to(device))
+            model_list.append(model_fn(hidden_size['1'], n_class=cfg['n_class']).to(device))
             model_log.append(1)
 
 # calculate the number of BW
@@ -159,7 +164,7 @@ print(f'model_list: {model_log}')
 n_model = len(model_list)
 
 # for federation learning
-fed = Federation([model_list[i].state_dict() for i in range(n_model)])
+fed = Federation([model_list[i].state_dict() for i in range(n_model)], n_class=cfg['n_class'], model_fn=model_fn)
 
 # create loss function for FL training
 loss_fn = LocalMaskCrossEntropyLoss(cfg['n_class'])
@@ -190,9 +195,6 @@ else:
         model_tag += '_only-strong'
     elif cfg['only_weak']:
         model_tag += '_only-weak'
-# if cfg['dataset'] == 'CIFAR10' and model_fn == ResNet:
-#     model_tag += '_ResNet'
-#     model_name = 'ResNet'
 if model_fn == ResNet:
     model_tag += '_ResNet'
     model_name = 'ResNet'
@@ -205,7 +207,8 @@ os.makedirs('./log', exist_ok=True)
 
 # if cfg['log']:
 print("inititating wandb...")
-wandb.init(group=output_dir, project='CIFAR100_ResNet152_fedfold')
+if cfg['log']:
+    wandb.init(group=output_dir, project='CIFAR100_ResNet152_fedfold')
 log_f = open(f"./log/{model_tag}_{cfg['device_ratio']}.txt", 'w')
 
 
@@ -301,9 +304,14 @@ for epoch in range(1, cfg['global_epochs'] + 1):
 
                     TIME_START = time.time()
                     cpu_start = time.process_time()
-                    cuda_start = torch.cuda.Event(enable_timing=True)
-                    cuda_end = torch.cuda.Event(enable_timing=True)
-                    cuda_start.record()
+                    if torch.cuda.is_available():
+                        cuda_start = torch.cuda.Event(enable_timing=True)
+                        cuda_end = torch.cuda.Event(enable_timing=True)
+                    else:
+                        cuda_start = None
+                        cuda_end = None
+                    if cuda_start is not None:
+                        cuda_start.record()
 
                     CPU_TIME_START = time.process_time()
                     # forward data
@@ -321,9 +329,13 @@ for epoch in range(1, cfg['global_epochs'] + 1):
                     # update parameters with computed gradient
                     optimizers[idx].step()
                     WALL_TIME += time.time() - TIME_START
-                    cuda_end.record()
-                    torch.cuda.synchronize()
-                    cuda_time += cuda_start.elapsed_time(cuda_end)
+                    if cuda_end is not None:
+                        cuda_end.record()
+                        torch.cuda.synchronize()
+                        cuda_time += cuda_start.elapsed_time(cuda_end)
+                    else:
+                        cuda_time = 0.0
+
                     CPU_TIME += time.process_time()-CPU_TIME_START
                     
                     # log training loss and accuracy
@@ -341,12 +353,23 @@ for epoch in range(1, cfg['global_epochs'] + 1):
                         model_3_train_acc.append(acc.item())
                     elif idx == 4:
                         model_4_train_acc.append(acc.item())
-        
+
+        # select quantize rate
+        current_bits = 32
+        if cfg['quantize']:
+            bits_list = [1, 2, 4, 8, 16, 32]
+            if cfg['quant_bits'] == -1: # default: random
+                current_bits = bits_list[random.randint(0, len(bits_list) - 1)] 
+                print(f"Random quantize rate with current bit: {current_bits}")
+            elif cfg['quant_bits'] in bits_list:
+                current_bits = cfg['quant_bits']
+                print(f"Fix quantize rate with current bit: {current_bits}")
+            else:
+                print(f"Warning: Invalid quantization bits ({cfg['quant_bits']}). Defaulting to random.")
+                current_bits = bits_list[random.randint(0, len(bits_list) - 1)]
+            random_number = random.randint(0, 5)
+
         # upload local model parameter to server
-        # bits = 1
-        bits = [1,2,4,8,16,32]
-        random_number = random.randint(0, 5)
-        # random_number = 0
         if device_type[i] == 'S'or device_type[i] == 'M':                
             models = []
             split_size = 1
@@ -357,57 +380,29 @@ for epoch in range(1, cfg['global_epochs'] + 1):
                 models.append(model_list[idx].state_dict())
 
             local_model = Utils.accum_model(models)
-            split_models = Utils.split_model(local_model, split_size, model_name, 1)
+            split_models = Utils.split_model(local_model, split_size, model_name, 1, cfg['n_class'])
             aggregate_model = Utils.accum_model(split_models)
             total_bytes = 0
             for param_name, param in aggregate_model.items():
                 total_bytes += param.nelement() * param.element_size()
             print(f"total bytes: {total_bytes}") 
-            quantized_dict = {k: Compressor.quantize(v, bits[random_number]) for k, v in aggregate_model.items()} 
-            fed.upload(quantized_dict, 0, 0, 1)    
-            # fed.upload(local_model, 4, 1, 0)              
-        #     total_bytes_quantized = 0
-        #     for k, v in quantized_dict.items():
-        #         total_bytes_quantized += v.nelement() * (bits[random_number] / 8)  # bits to bytes
-        #     print(f"Total bytes of model[{idx}] after quantization: {total_bytes_quantized}")
-        
-
+            # quantize models
+            if cfg['quantize']:
+                quantized_dict = {k: Compressor.quantize(v, current_bits) for k, v in aggregate_model.items()} 
+                fed.upload(quantized_dict, 0, 0, 1)  
+                total_bytes_quantized = 0
+                for k, v in quantized_dict.items():
+                    total_bytes_quantized += v.nelement() * (current_bits / 8)  # bits to bytes
+                print(f"Total bytes of model[{idx}] after quantization: {total_bytes_quantized}")
+            else:
+                fed.upload(aggregate_model, 0, 0, 1)            
         else:
             for idx in model_idx:
-                # fed.upload(model_list[idx].state_dict(), idx,0,0)
-                quantized_dict = {k: Compressor.quantize(v, bits[random_number]) for k, v in model_list[idx].state_dict().items()} 
-                fed.upload(quantized_dict, idx, 0, 0) 
-        # k_ratio = 0.05
-        # for idx in model_idx:
-             # if device_type[i] == 'S':                
-        #         model_dict = model_list[idx].state_dict()
-        #         # print the original model parameters
-            # for param in model_list[idx].parameters():
-            #     total_bytes += param.data.nelement() * param.data.element_size()
-            # print(f"total bytes of model[{idx}]: {total_bytes}")
-            
-                # apply top-K compression
-            # Compressor.apply_top_k(model_list[idx], k_ratio)
-            # total_bytes_top_k = 0
-            # for param in model_list[idx].parameters():
-            #     total_bytes_top_k += param.data.nelement() * param.data.element_size()
-            # print(f"Total bytes of model[{idx}] after Top-K: {total_bytes_top_k}")
-        
-                # apply quantization compression
-            #     print(f"quantize for {bits} bits")
-            #     param_key = list(model_dict.keys())[0]               
-            # quantized_dict = {k: Compressor.quantize(v, bits[4]) for k, v in model_list[idx].state_dict().items()}
-            # total_bytes_quantized = 0
-            # for k, v in quantized_dict.items():
-            #     total_bytes_quantized += v.nelement() * (bits[4] / 8)  # bits to bytes
-            # print(f"Total bytes of model[{idx}] after quantization: {total_bytes_quantized}")
-             # print(quantized_dict)
-            # fed.upload(model_list[idx].state_dict(), idx, 0, 0)
-            # else:
-            #     fed.upload(model_list[idx].state_dict(), idx, 0)
-                # print(model_list[idx].state_dict())
-            # total_bytes = 0         
-            # fed.upload(model_list[idx].state_dict(), idx,0,0)
+                if cfg['quantize']:
+                    quantized_dict = {k: Compressor.quantize(v, current_bits) for k, v in model_list[idx].state_dict().items()} 
+                    fed.upload(quantized_dict, idx, 0, 0) 
+                else:
+                    fed.upload(model_list[idx].state_dict(), idx,0,0)
         print(f'Device {i} train {model_idx}, Wall time: {WALL_TIME:.3f}s, CPU time: {CPU_TIME:.3f}s, cuda time: {cuda_time:.3f}s')       
         MAX_WALL_TIME = max(MAX_WALL_TIME, WALL_TIME)
         MAX_CPU_TIME = max(MAX_CPU_TIME, CPU_TIME)
@@ -490,9 +485,9 @@ for epoch in range(1, cfg['global_epochs'] + 1):
     print(f"[ Val | {epoch :03d}/{cfg['global_epochs']:03d} ] loss = {val_loss:.4f}, acc = {val_acc:.4f}")
 
 
-    # if cfg['log']:
-    wandb.log({'train_loss': train_loss, 'train_acc': train_acc, 'val_loss': val_loss, 'val_acc': val_acc})
-        # for ploting convergence time
+    if cfg['log']:
+        wandb.log({'train_loss': train_loss, 'train_acc': train_acc, 'val_loss': val_loss, 'val_acc': val_acc})
+    # for ploting convergence time
     print(f"{val_acc}", file=log_f)
     log_f.flush()
 end = time.time()

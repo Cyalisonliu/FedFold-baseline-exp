@@ -3,12 +3,14 @@ import torch
 from utils import Compressor, Utils
 
 class Federation:
-    def __init__(self, global_params): 
+    def __init__(self, global_params, n_class, model_fn): 
         self.global_params = []
         self.accum_global_params = []
         self.cnt = []
+        self.n_class = n_class
+        self.model_type = model_fn.__name__
 
-        for i in range(len(global_params)): # 8 small + 2 large
+        for i in range(len(global_params)):
             # self.global_params.append({k: copy.deepcopy(v) for k, v in global_params[i].items()})
             self.global_params.append({k: v.detach().clone() for k, v in global_params[i].items()})
             self.accum_global_params.append({k: torch.zeros_like(v) for k, v in global_params[i].items()})
@@ -20,7 +22,7 @@ class Federation:
             local_params[k] = v.detach().clone()
 
     def upload(self, local_params, idx, need_split, need_expand):
-        model_type = 'ResNet'
+        model_type = self.model_type
         hidden_size = [
             [4, 8, 16, 32],
             [4, 8, 16, 32],
@@ -29,7 +31,7 @@ class Federation:
             [32, 64, 128, 256], 
         ]
         if need_split:           
-            split_models = Utils.split_model(local_params, 8,model_type, 0) # :-1          
+            split_models = Utils.split_model(local_params, 8,model_type, 0, self.n_class) # :-1          
             for i in range(len(split_models)):
                 self.cnt[i]+=1
                 for k, v in split_models[i].items():

@@ -14,6 +14,7 @@ def set_parameters(cfg):
         # model_fn = Conv
         model_fn = ResNet # for CIFAR10 with ResNet
         cfg['n_class'] = 10
+        n_class = 10
         if len(cfg['train_ratio'].split('-')) == 3 or model_fn == ResNet:
             cfg['global_epochs'] = 300
         else:
@@ -30,6 +31,7 @@ def set_parameters(cfg):
         # model_fn = Conv 
         model_fn = ResNet
         cfg['n_class'] = 100
+        n_class = 100
         cfg['global_epochs'] = 300
         cfg['local_epochs'] = 5
         hidden_size = {
@@ -43,6 +45,7 @@ def set_parameters(cfg):
         # model_fn = Conv 
         model_fn = ResNet
         cfg['n_class'] = 200
+        n_class = 200
         cfg['global_epochs'] = 300
         cfg['local_epochs'] = 5
         hidden_size = {
@@ -55,6 +58,7 @@ def set_parameters(cfg):
     elif cfg['dataset'] == 'Otto':
         model_fn = MLP
         cfg['n_class'] = 9
+        n_class = 9
         cfg['global_epochs'] = 100
         cfg['local_epochs'] = 3
         hidden_size = {
@@ -67,6 +71,7 @@ def set_parameters(cfg):
     elif cfg['dataset'] == 'SVHN':
         model_fn = ResNet
         cfg['n_class'] = 10
+        n_class = 10
         cfg['global_epochs'] = 500
         cfg['local_epochs'] = 5
         hidden_size = {
@@ -76,7 +81,7 @@ def set_parameters(cfg):
             '2': [8, 16, 32, 64],
             '1': [4, 8, 16, 32]
         }
-    return model_fn, hidden_size
+    return model_fn, hidden_size, n_class
 
 class SplitDataset(Dataset):
     def __init__(self, dataset, data_idx):

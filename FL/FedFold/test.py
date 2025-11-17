@@ -60,7 +60,7 @@ cfg['medium_BW'] = int(args.train_ratio.split('-')[1]) # for three types of devi
 cfg['dataset'] = args.dataset
 
 # get model function and hidden size according to dataset
-model_fn, hidden_size = set_parameters(cfg)
+model_fn, hidden_size, cfg['n_class'] = set_parameters(cfg)
 
 # get model path
 model_tag = f"{cfg['dataset']}_non-iid-{cfg['n_split']}_train-ratio-{cfg['train_ratio']}"
@@ -112,29 +112,29 @@ TBW = cfg['TBW']
 model_list = []
 model_log = []
 if cfg['device_ratio'] == 'W10':
-    model_list.append(model_fn(hidden_size['1']).to(device))
+    model_list.append(model_fn(hidden_size['1'], n_class=cfg['n_class']).to(device))
     model_log.append(1)
 elif cfg['device_ratio'] == 'S10':
-    model_list.append(model_fn(hidden_size[str(TBW)]).to(device))
+    model_list.append(model_fn(hidden_size[str(TBW)], n_class=cfg['n_class']).to(device))
     model_log.append(TBW)
 else:
     if cfg['fix_split'] == -1: # progressive splitting
         while TBW != 1:
             target = math.ceil(TBW/2)
-            model_list.append(model_fn(hidden_size[str(target)]).to(device))
+            model_list.append(model_fn(hidden_size[str(target)], n_class=cfg['n_class']).to(device))
             model_log.append(target)
             TBW -= target
-        model_list.append(model_fn(hidden_size['1']).to(device))
+        model_list.append(model_fn(hidden_size['1'], n_class=cfg['n_class']).to(device))
         model_log.append(1)
     else: # fixed splitting
         target = math.ceil(TBW/2)
         remain = TBW - target
         while target >= cfg['fix_split']:
-            model_list.append(model_fn(hidden_size[str(cfg['fix_split'])]).to(device))
+            model_list.append(model_fn(hidden_size[str(cfg['fix_split'])], n_class=cfg['n_class']).to(device))
             model_log.append(cfg['fix_split'])
             target -= cfg['fix_split']
         for _ in range(remain + target):         
-            model_list.append(model_fn(hidden_size['1']).to(device))
+            model_list.append(model_fn(hidden_size['1'], n_class=cfg['n_class']).to(device))
             model_log.append(1)
 
 # calculate the number of BW

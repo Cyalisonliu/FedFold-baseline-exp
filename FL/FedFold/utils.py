@@ -24,19 +24,6 @@ class Compressor:
                     compressed_param = torch.zeros_like(param_flat)
                     compressed_param[idxs] = param_flat[idxs]
                     param.copy_(compressed_param.view_as(param))
-        # with torch.no_grad():
-        #     for param in model.parameters():
-        #         if param.grad is not None:
-        #             # Flatten the gradient tensor and compute the number of values to keep
-        #             grad_flat = param.grad.view(-1)
-        #             k = int(len(grad_flat) * k_ratio)
-        #             if k == 0:
-        #                 continue
-                    
-        #             _, idxs = torch.topk(grad_flat.abs(), k, sorted=False)                    
-        #             compressed_grad = torch.zeros_like(grad_flat)                    
-        #             compressed_grad[idxs] = grad_flat[idxs]
-        #             param.grad = compressed_grad.view_as(param.grad)
 
     def quantize(params, bits):
         assert 1 <= bits <= 32, "Bits should be between 1 and 32."
@@ -140,9 +127,8 @@ class Utils:
         return local_model_params
     
     # split the aggregate model, no split linear part
-    def split_resnet_params(global_params, hidden_sizes, moving_spitting):
+    def split_resnet_params(global_params, hidden_sizes, moving_spitting, n_class: int = 10):
         models = [{} for _ in hidden_sizes]
-        n_class = 10
 
         for k, concat_param in global_params.items():
             start_idx1 = 0
@@ -207,9 +193,9 @@ class Utils:
                 
         return models
     
-    def split_cnn_params(global_params, hidden_sizes, moving_splitting):
+    def split_cnn_params(global_params, hidden_sizes, moving_splitting, n_class: int = 10):
         models = [{} for _ in hidden_sizes]
-        n_class = 10
+
         for k, concat_param in global_params.items():
             start_idx1 = 0
             start_idx2 = 0
@@ -268,15 +254,15 @@ class Utils:
                 # print(f"Split model {i} param shape for {k}: {models[i][k].shape}")
         return models
 
-    def split_model(local_model, split_size, model_type, moving_splitting):
+    def split_model(local_model, split_size, model_type, moving_splitting, n_class):
         split_models = []
         
         hidden_size = Utils.get_hidden_size(split_size)
             
         if model_type == 'ResNet':
-            split_models.extend(Utils.split_resnet_params(local_model, hidden_size, moving_splitting))
+            split_models.extend(Utils.split_resnet_params(local_model, hidden_size, moving_splitting, n_class))
         elif model_type =='Conv':
-            split_models.extend(Utils.split_cnn_params(local_model, hidden_size, moving_splitting))
+            split_models.extend(Utils.split_cnn_params(local_model, hidden_size, moving_splitting, n_class))
         # print(len(models))
         return split_models
 
