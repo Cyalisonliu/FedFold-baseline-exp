@@ -195,7 +195,6 @@ class Utils:
     
     def split_cnn_params(global_params, hidden_sizes, moving_splitting, n_class: int = 10):
         models = [{} for _ in hidden_sizes]
-
         for k, concat_param in global_params.items():
             start_idx1 = 0
             start_idx2 = 0

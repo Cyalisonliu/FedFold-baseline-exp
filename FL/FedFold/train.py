@@ -388,14 +388,14 @@ for epoch in range(1, cfg['global_epochs'] + 1):
             print(f"total bytes: {total_bytes}") 
             # quantize models
             if cfg['quantize']:
-                quantized_dict = {k: Compressor.quantize(v, current_bits) for k, v in aggregate_model.items()} 
-                fed.upload(quantized_dict, 0, 0, 1)  
+                quantized_dict = {k: Compressor.quantize(v, current_bits) for k, v in aggregate_model.items()}  
                 total_bytes_quantized = 0
                 for k, v in quantized_dict.items():
                     total_bytes_quantized += v.nelement() * (current_bits / 8)  # bits to bytes
                 print(f"Total bytes of model[{idx}] after quantization: {total_bytes_quantized}")
             else:
-                fed.upload(aggregate_model, 0, 0, 1)            
+                quantized_dict = aggregate_model
+            fed.upload(quantized_dict, 0, 0, 1)           
         else:
             for idx in model_idx:
                 if cfg['quantize']:
