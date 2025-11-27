@@ -61,3 +61,7 @@ env/
 miniconda/
 # Conda package cache
 pkgs/
+
+# Ignore JSONL files (e.g., large logs or datasets)
+*.jsonl
+*.json
