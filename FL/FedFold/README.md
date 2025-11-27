@@ -52,3 +52,15 @@ Example (quick smoke run):
 python train.py --n_device 10000 --sim_mode replicate --replicate_splits 100 \
         --selection_mode proportional --participation_rate 0.01 --global_epochs 2 --local_epochs 1 --n_split 2 --dataset CIFAR10
 ```
+
+### Example results
+
+Below are example training accuracy curves produced from recent runs (PNG files are under `run_logs/plots/`).
+
+- Quick small run (`quick_small`): shows training and validation accuracy vs epoch for a smaller-scale smoke test.
+
+    ![Accuracy vs epoch (quick_small)](run_logs/plots/quick_small_acc_vs_epoch.png)
+
+- Replicate proportional selection (`replicate_1k_prop`): shows training and validation accuracy vs epoch for a replicated-splits experiment with proportional selection.
+
+    ![Accuracy vs epoch (replicate_1k_prop)](run_logs/plots/replicate_1k_prop_acc_vs_epoch.png)
