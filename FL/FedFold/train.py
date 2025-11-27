@@ -5,6 +5,7 @@ import time
 import argparse
 import math
 import random
+import json
 
 import torch
 from torch.utils.data import DataLoader
@@ -60,6 +61,14 @@ parser.add_argument('--dataset', type=str, default='CIFAR10', help='dataset')
 parser.add_argument('--quantize', action='store_true', help='Apply quantization to uploaded model weights.')
 parser.add_argument('--quant_bits', type=int, default=-1, 
                     help='Fixed number of bits for quantization (e.g., 4, 8, 16). If -1, a random rate from [1, 2, 4, 8, 16, 32] is selected.')
+parser.add_argument('--n_device', type=int, default=100, help='total number of devices (clients) to simulate')
+parser.add_argument('--selected_device', type=int, default=cfg['selected_device'], help='(fixed) number of devices to select each round')
+parser.add_argument('--selection_mode', type=str, choices=['fixed','proportional'], default='fixed', help='selection scaling: fixed keeps selected_device constant; proportional scales selected_device by participation_rate')
+parser.add_argument('--participation_rate', type=float, default=0.1, help='(used when selection_mode=proportional) fraction of population to select each round')
+parser.add_argument('--sim_mode', type=str, choices=['none','replicate','synthetic'], default='none', help='simulation mode for large n_device')
+parser.add_argument('--replicate_splits', type=int, default=100, help='number of base splits to create when sim_mode=replicate')
+parser.add_argument('--global_epochs', type=int, default=cfg['global_epochs'], help='number of global epochs to run')
+parser.add_argument('--local_epochs', type=int, default=cfg['local_epochs'], help='number of local epochs per selected client')
 args = parser.parse_args()
 
 cfg['log'] = args.log
@@ -74,6 +83,14 @@ cfg['medium_BW'] = int(args.train_ratio.split('-')[1]) # for three types of devi
 cfg['dataset'] = args.dataset
 cfg['quantize'] = args.quantize
 cfg['quant_bits'] = args.quant_bits
+cfg['n_device'] = args.n_device
+cfg['selected_device'] = args.selected_device
+cfg['selection_mode'] = args.selection_mode
+cfg['participation_rate'] = args.participation_rate
+cfg['sim_mode'] = args.sim_mode
+cfg['replicate_splits'] = args.replicate_splits
+cfg['global_epochs'] = args.global_epochs
+cfg['local_epochs'] = args.local_epochs
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 # device = 'cpu'
 print(torch.cuda.is_available())
@@ -87,19 +104,42 @@ model_fn, hidden_size, cfg['n_class']= set_parameters(cfg)
 # split train dataset for Non-IID
 fixSeed(cfg['seed'])
 data_split = {}
-data_split['train'], label_split = split_dataset(labels['train'], cfg['n_device'], cfg['n_class'], cfg['n_split'])
+# If replicate mode, create K base splits and keep them; mapping to virtual clients will be
+# created per-epoch (randomized) so each epoch virtual clients can be assigned different base splits.
+base_split_dict = None
+base_label_split = None
+if cfg['sim_mode'] == 'replicate':
+    K = max(1, int(cfg['replicate_splits']))
+    print(f"Sim mode=replicate: creating {K} base splits (will map to {cfg['n_device']} virtual clients per-epoch)")
+    base_split_dict, base_label_split = split_dataset(labels['train'], K, cfg['n_class'], cfg['n_split'])
+    # base_split_dict: dict {0: [idxs], ...}
+    # We'll generate a randomized mapping (length n_device) per epoch later.
+else:
+    data_split['train'], label_split = split_dataset(labels['train'], cfg['n_device'], cfg['n_class'], cfg['n_split'])
 
 # Open a log file for writing the classes of each device
 class_log_file = open("device_classes_log.txt", "w")
-for i in range(cfg['n_device']):
-    class_log_file.write(f"Classes {label_split[i]}\n")
+if cfg['sim_mode'] == 'replicate':
+    # label_split for replicate refers to base_label_split; write base splits only
+    for j in range(len(base_label_split)):
+        class_log_file.write(f"BaseSplit {j} Classes {base_label_split[j]}\n")
+    # for virtual clients we will map at runtime; optionally note mapping later
+else:
+    for i in range(cfg['n_device']):
+        class_log_file.write(f"Classes {label_split[i]}\n")
 class_log_file.close()
 
-# make dataloader
-train_loader = []
-for i in range(cfg['n_device']):
-    train_set = SplitDataset(dataset['train'], data_split['train'][i])
-    train_loader.append(DataLoader(train_set, batch_size=cfg['batch_size'], shuffle=True, num_workers=1, pin_memory=True))
+# # make dataloader
+# train_loader = []
+# for i in range(cfg['n_device']):
+#     train_set = SplitDataset(dataset['train'], data_split['train'][i])
+#     # train_loader.append(DataLoader(train_set, batch_size=cfg['batch_size'], shuffle=True, num_workers=1, pin_memory=True))
+
+# NOTE: to support very large `n_device` we do NOT pre-create a DataLoader per client
+# (that would use a lot of memory). Instead we create DataLoaders on-the-fly for
+# the selected devices inside the training loop. This makes it possible to set
+# `--n_device` to a very large number and only materialize loaders for the
+# few clients participating each round.
 val_loader = DataLoader(dataset['val'], batch_size=128, shuffle=False, num_workers=1, pin_memory=True)
 
 # create model
@@ -170,15 +210,37 @@ fed = Federation([model_list[i].state_dict() for i in range(n_model)], n_class=c
 loss_fn = LocalMaskCrossEntropyLoss(cfg['n_class'])
 
 # setting device type according to device ratio
+# Interpret `device_ratio` as relative weights (e.g., 'S2-W8') and allocate
+# device counts proportionally so total devices == cfg['n_device'].
 device_type = []
 device_cnt = []
 select = []
-for ratio in cfg['device_ratio'].split('-'):
-    device_type += [ratio[0]]*int(ratio[1:])*cfg['selected_device']
-    device_cnt.append(int(ratio[1:])*cfg['selected_device'])
-    select.append(int(ratio[1:]))
-print(f'device_type: {device_type}')
-print(f'device_cnt: {device_cnt}')
+parts = []
+for part in cfg['device_ratio'].split('-'):
+    kind = part[0]
+    try:
+        weight = int(part[1:])
+    except Exception:
+        weight = 1
+    parts.append((kind, weight))
+
+# compute counts per kind proportional to n_device
+total_weight = sum(w for _, w in parts)
+remaining = cfg['n_device']
+counts = []
+for i, (kind, weight) in enumerate(parts):
+    if i == len(parts) - 1:
+        cnt = remaining
+    else:
+        cnt = int(round(cfg['n_device'] * (weight / total_weight)))
+        remaining -= cnt
+    counts.append((kind, cnt))
+
+for kind, cnt in counts:
+    device_type += [kind] * cnt
+    device_cnt.append(cnt)
+
+print(f'device_type counts: {device_cnt} (sum={sum(device_cnt)})')
 
 # create model tag for saving model
 time_stamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
@@ -212,16 +274,54 @@ if cfg['log']:
 log_f = open(f"./log/{model_tag}_{cfg['device_ratio']}.txt", 'w')
 
 
-# for fixed selection
-# S2-W8: 20, 80 => 0, 20, 100
-device_cnt.insert(0, 0) 
-for i in range(len(select)):   
-    device_cnt[i+1] += device_cnt[i]  
+# Build cumulative device boundaries and compute per-kind selection counts (`select`).
+# device_cnt currently holds counts per device kind, e.g. [20, 80].
+# device_bounds will be [0, 20, 100] (start/end indices for each kind).
+device_bounds = [0]
+for cnt in device_cnt:
+    device_bounds.append(device_bounds[-1] + cnt)
+
+# Compute how many devices to select per kind depending on selection_mode.
+# Two modes supported: 'fixed' -> cfg['selected_device'] total; 'proportional' -> participation_rate * n_device.
+if cfg['selection_mode'] == 'fixed':
+    total_selected = int(cfg['selected_device'])
+else:
+    total_selected = int(round(cfg['participation_rate'] * cfg['n_device']))
+
+# Ensure at least one client is selected to avoid empty selections
+total_selected = max(1, total_selected)
+
+# Distribute total_selected across kinds proportionally to their counts.
+select = []
+selected_so_far = 0
+for i, cnt in enumerate(device_cnt):
+    if i == len(device_cnt) - 1:
+        # ensure sum(select) == total_selected
+        s = max(0, total_selected - selected_so_far)
+    else:
+        s = int(round(total_selected * (cnt / max(1, cfg['n_device']))))
+        selected_so_far += s
+    select.append(s)
+
+print(f"selection mode: {cfg['selection_mode']}, total_selected: {total_selected}, per-kind select: {select}")
 
 # start training
 BW_idx = 0
 best_acc = [0.0]*n_model
 model_cnt = [0]*n_model
+
+# write experiment config to metadata file
+meta_path = os.path.join(output_dir, 'run_meta.json')
+with open(meta_path, 'w') as mf:
+    json.dump({
+        'cfg': cfg,
+        'time_stamp': time_stamp,
+        'model_tag': model_tag
+    }, mf, indent=2)
+
+# open per-epoch metrics file (json lines)
+metrics_path = os.path.join(output_dir, 'epoch_metrics.jsonl')
+metrics_f = open(metrics_path, 'w')
 
 #calculate total training time
 total_comp_time = 0.0
@@ -229,14 +329,35 @@ total_cpu_comp_time = 0.0
 start = time.time()
 
 for epoch in range(1, cfg['global_epochs'] + 1):
+    # If replicate mode, generate a randomized mapping from virtual clients -> base splits
+    if cfg['sim_mode'] == 'replicate':
+        K = len(base_split_dict)
+        # create balanced mapping by tiling base indices then shuffling
+        tile = np.tile(np.arange(K), int(np.ceil(cfg['n_device'] / K)))[:cfg['n_device']]
+        mapping = np.random.permutation(tile)
+        # mapping[i] gives which base split client i uses this epoch
+    else:
+        mapping = None
+
+    # per-epoch instrumentation collectors
+    epoch_record = {
+        'epoch': epoch,
+        'selected_clients': [],
+        'client_uploads': [],
+        'total_wall_time': 0.0,
+        'total_cpu_time': 0.0,
+        'total_cuda_time': 0.0
+    }
     device_idx = []
     if cfg['only_strong']:
-        device_idx += np.random.permutation(np.arange(device_cnt[0], device_cnt[1])).tolist()[:select[0]]
+        # strong devices are in device_bounds[0:2]
+        device_idx += np.random.permutation(np.arange(device_bounds[0], device_bounds[1])).tolist()[:select[0]]
     elif cfg['only_weak']:
-        device_idx += np.random.permutation(np.arange(device_cnt[1], device_cnt[2])).tolist()[:select[1]]
+        # weak devices are in device_bounds[1:3] (assuming two kinds)
+        device_idx += np.random.permutation(np.arange(device_bounds[1], device_bounds[2])).tolist()[:select[1]]
     else:
-        for i in range(len(select)):   
-            device_idx += np.random.permutation(np.arange(device_cnt[i], device_cnt[i+1])).tolist()[:select[i]]
+        for i in range(len(select)):
+            device_idx += np.random.permutation(np.arange(device_bounds[i], device_bounds[i+1])).tolist()[:select[i]]
   
     print(f"Epoch {epoch}: {cfg['device_ratio']}, {device_idx}")
 
@@ -294,8 +415,18 @@ for epoch in range(1, cfg['global_epochs'] + 1):
         WALL_TIME = 0.0
         cuda_time = 0.0
         CPU_TIME = 0.0
+        # create DataLoader for this device on-the-fly to save memory when n_device is large
+        if cfg['sim_mode'] == 'replicate':
+            src = int(mapping[i])
+            train_indices = base_split_dict[src]
+            client_label_split = base_label_split[src]
+        else:
+            train_indices = data_split['train'][i]
+            client_label_split = label_split[i]
+        train_set = SplitDataset(dataset['train'], train_indices)
+        loader = DataLoader(train_set, batch_size=cfg['batch_size'], shuffle=True, num_workers=1, pin_memory=True)
         for local_epoch in range(cfg['local_epochs']):
-            for img, label in train_loader[i]:
+            for img, label in loader:
                 img, label = img.to(device), label.to(device)
 
                 for idx in model_idx:
@@ -395,14 +526,38 @@ for epoch in range(1, cfg['global_epochs'] + 1):
                 print(f"Total bytes of model[{idx}] after quantization: {total_bytes_quantized}")
             else:
                 quantized_dict = aggregate_model
+            # time the upload to collect a simple upload duration metric
+            up_start = time.time()
+            fed.upload(quantized_dict, 0, 0, 1)
+            up_time = time.time() - up_start
+            uploaded_bytes = 0
+            if cfg['quantize']:
+                for k, v in quantized_dict.items():
+                    uploaded_bytes += v.nelement() * (current_bits / 8)
+            else:
+                for k, v in aggregate_model.items():
+                    uploaded_bytes += v.nelement() * v.element_size()
+            epoch_record['client_uploads'].append({'client': i, 'bytes': uploaded_bytes, 'upload_time': up_time, 'model_idx': 0})
             fed.upload(quantized_dict, 0, 0, 1)           
         else:
             for idx in model_idx:
                 if cfg['quantize']:
                     quantized_dict = {k: Compressor.quantize(v, current_bits) for k, v in model_list[idx].state_dict().items()} 
-                    fed.upload(quantized_dict, idx, 0, 0) 
+                    up_start = time.time()
+                    fed.upload(quantized_dict, idx, 0, 0)
+                    up_time = time.time() - up_start
+                    uploaded_bytes = 0
+                    for k, v in quantized_dict.items():
+                        uploaded_bytes += v.nelement() * (current_bits / 8)
+                    epoch_record['client_uploads'].append({'client': i, 'bytes': uploaded_bytes, 'upload_time': up_time, 'model_idx': idx})
                 else:
+                    up_start = time.time()
                     fed.upload(model_list[idx].state_dict(), idx,0,0)
+                    up_time = time.time() - up_start
+                    uploaded_bytes = 0
+                    for k, v in model_list[idx].state_dict().items():
+                        uploaded_bytes += v.nelement() * v.element_size()
+                    epoch_record['client_uploads'].append({'client': i, 'bytes': uploaded_bytes, 'upload_time': up_time, 'model_idx': idx})
         print(f'Device {i} train {model_idx}, Wall time: {WALL_TIME:.3f}s, CPU time: {CPU_TIME:.3f}s, cuda time: {cuda_time:.3f}s')       
         MAX_WALL_TIME = max(MAX_WALL_TIME, WALL_TIME)
         MAX_CPU_TIME = max(MAX_CPU_TIME, CPU_TIME)
@@ -413,6 +568,15 @@ for epoch in range(1, cfg['global_epochs'] + 1):
     # after local training, server aggregates model parameter
     step = epoch
     fed.aggregate()
+    # finalize epoch_record timing
+    epoch_record['total_wall_time'] = total_comp_time
+    epoch_record['total_cpu_time'] = total_cpu_comp_time
+    epoch_record['total_cuda_time'] = 0.0
+    # list selected clients
+    epoch_record['selected_clients'] = device_idx
+    # write epoch_record to jsonl
+    metrics_f.write(json.dumps(epoch_record) + "\n")
+    metrics_f.flush()
     if model_0_train_acc:
         avg_train_acc = sum(model_0_train_acc) / len(model_0_train_acc)
         avg_train_loss = sum(model_0_train_loss) / len(model_0_train_loss)
@@ -493,6 +657,7 @@ for epoch in range(1, cfg['global_epochs'] + 1):
 end = time.time()
 cpu_end = time.process_time()
 
+metrics_f.close()
 
 print(f"Cuda time: {cuda_start.elapsed_time(cuda_end)}ms")
 print(f"Parallel Wall time: {total_comp_time:.3f}ds")

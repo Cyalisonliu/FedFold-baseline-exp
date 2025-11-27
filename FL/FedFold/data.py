@@ -12,14 +12,12 @@ from model import Conv, MLP, ResNet
 def set_parameters(cfg):
     if cfg['dataset'] == 'CIFAR10':
         # model_fn = Conv
-        model_fn = ResNet # for CIFAR10 with ResNet
+        model_fn = ResNet  # for CIFAR10 use ResNet
         cfg['n_class'] = 10
         n_class = 10
-        if len(cfg['train_ratio'].split('-')) == 3 or model_fn == ResNet:
-            cfg['global_epochs'] = 300
-        else:
-            cfg['global_epochs'] = 300
-        cfg['local_epochs'] = 5
+        # Respect CLI / earlier cfg values; only set defaults when missing
+        cfg.setdefault('global_epochs', 300)
+        cfg.setdefault('local_epochs', 5)
         hidden_size = {
             '16': [64, 128, 256, 512],
             '8': [32, 64, 128, 256],
@@ -28,12 +26,11 @@ def set_parameters(cfg):
             '1': [4, 8, 16, 32]
         }
     elif cfg['dataset'] == 'CIFAR100':
-        # model_fn = Conv 
         model_fn = ResNet
         cfg['n_class'] = 100
         n_class = 100
-        cfg['global_epochs'] = 300
-        cfg['local_epochs'] = 5
+        cfg.setdefault('global_epochs', 300)
+        cfg.setdefault('local_epochs', 5)
         hidden_size = {
             '16': [64, 128, 256, 512],
             '8': [32, 64, 128, 256],
@@ -42,12 +39,11 @@ def set_parameters(cfg):
             '1': [4, 8, 16, 32]
         }
     elif cfg['dataset'] == 'TinyImageNet':
-        # model_fn = Conv 
         model_fn = ResNet
         cfg['n_class'] = 200
         n_class = 200
-        cfg['global_epochs'] = 300
-        cfg['local_epochs'] = 5
+        cfg.setdefault('global_epochs', 300)
+        cfg.setdefault('local_epochs', 5)
         hidden_size = {
             '16': [64, 128, 256, 512],
             '8': [32, 64, 128, 256],
@@ -59,8 +55,8 @@ def set_parameters(cfg):
         model_fn = MLP
         cfg['n_class'] = 9
         n_class = 9
-        cfg['global_epochs'] = 100
-        cfg['local_epochs'] = 3
+        cfg.setdefault('global_epochs', 100)
+        cfg.setdefault('local_epochs', 3)
         hidden_size = {
             '16': [128, 64],
             '8': [64, 32],
@@ -72,8 +68,8 @@ def set_parameters(cfg):
         model_fn = ResNet
         cfg['n_class'] = 10
         n_class = 10
-        cfg['global_epochs'] = 500
-        cfg['local_epochs'] = 5
+        cfg.setdefault('global_epochs', 500)
+        cfg.setdefault('local_epochs', 5)
         hidden_size = {
             '16': [64, 128, 256, 512],
             '8': [32, 64, 128, 256],
